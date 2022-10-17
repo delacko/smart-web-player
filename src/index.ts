@@ -1,1 +1,8 @@
-export { VideoJsPlayer as SmartWebPlayer } from './video_js';
+import { VideoJsPlayer } from './video_js';
+
+function getPlayer(): VideoJsPlayer {
+  return new VideoJsPlayer();
+}
+
+export { VideoJsPlayer };
+export default getPlayer;
