@@ -3,12 +3,12 @@ import {
   PlayerEventCallback,
   PlayerInterface,
   Quality,
-} from '../PlayerInterface';
+} from './PlayerInterface';
 import 'videojs-contrib-quality-levels';
 import 'videojs-contrib-eme';
 
 import videojs from 'video.js';
-import { timeout } from '../util';
+import { timeout } from './util';
 
 const videoJsWrapperId = 'videoJsWrapper';
 
@@ -16,8 +16,12 @@ let initialized = false;
 
 class VideoJsPlayer implements PlayerInterface {
   private player!: videojs.Player;
-  private playerId: string = 'video_js_player';
+  private readonly playerId: string = 'video_js_player';
   private eventCallback?: PlayerEventCallback;
+
+  isInitialized(): boolean {
+    return initialized;
+  }
 
   viewElement(): HTMLElement {
     const playerWrapper = document.createElement('div');
@@ -27,7 +31,7 @@ class VideoJsPlayer implements PlayerInterface {
 
     const videoElement = document.createElement('video');
     videoElement.id = this.playerId;
-    videoElement.className = 'video-js vjs-default-skin';
+    videoElement.className = 'video-js vjs-default-skin vjs-16-9';
 
     playerWrapper.replaceChildren(videoElement);
 
@@ -44,7 +48,6 @@ class VideoJsPlayer implements PlayerInterface {
     }
 
     return await new Promise((resolve) => {
-      this.playerId = '';
       this.player = videojs(this.playerId, {
         autoplay: true,
         autoSetup: true,
@@ -56,65 +59,10 @@ class VideoJsPlayer implements PlayerInterface {
         },
       });
       this.player.ready(() => {
-        this.player.on('ended', () => {
-          this.eventCallback?.({ key: this.playerId, type: 'completed' });
-        });
-
-        this.player.on('play', () => {
-          this.eventCallback?.({ key: this.playerId, type: 'play' });
-        });
-
-        this.player.on('pause', () => {
-          this.eventCallback?.({ key: this.playerId, type: 'pause' });
-        });
-
-        this.player.on('loadstart', () => {
-          this.eventCallback?.({ key: this.playerId, type: 'bufferingStart' });
-        });
-
-        this.player.on('progress', () => {
-          const buffered = this.player.buffered();
-          const duration = this.player.duration();
-          const bufferedRanges = Array(buffered?.length)
-            .fill(0)
-            .map((_, i) => ({
-              start: buffered.start(i),
-              end: buffered.end(i),
-            }));
-          if (bufferedRanges.length > 0) {
-            if (bufferedRanges[buffered.length - 1].end === duration) {
-              this.eventCallback?.({
-                key: this.playerId,
-                type: 'bufferingEnd',
-              });
-            } else {
-              this.eventCallback?.({
-                key: this.playerId,
-                type: 'bufferingUpdate',
-                buffered: bufferedRanges,
-              });
-            }
-          }
-        });
-
-        this.player.on('loadedmetadata', () => {
-          console.log(
-            `VIDEO_JS: loadedmetadata duration: ${this.player.duration()} width: ${this.player.videoWidth()} height:  ${this.player.videoHeight()}`
-          );
-
-          this.eventCallback?.({
-            key: this.playerId,
-            type: 'initialized',
-            duration: this.player.duration(),
-            size: {
-              width: this.player.videoWidth(),
-              height: this.player.videoHeight(),
-            },
-          });
-        });
-
         // @ts-expect-error
         this.player.eme();
+
+        console.log('initialized');
 
         initialized = true;
         resolve();
@@ -126,16 +74,24 @@ class VideoJsPlayer implements PlayerInterface {
     return this.player.dispose();
   }
 
+  private getSourceType(url: string): string {
+    if (url.includes('.mp4')) {
+      return 'video/mp4';
+    }
+    return 'application/x-mpegURL';
+  }
+
   async setSrc(url: string, drm: Drm | undefined): Promise<void> {
     return await timeout(
       new Promise<void>((resolve) => {
         this.player.src({
           src: url,
-          type: 'application/x-mpegURL', // TODO: figure out from source
-          ...(drm !== undefined && {
-            keySystems: this.getKeySystems(drm),
-            emeHeaders: drm?.headers,
-          }),
+          type: this.getSourceType(url),
+          ...(drm !== null &&
+            drm !== undefined && {
+              keySystems: this.getKeySystems(drm),
+              emeHeaders: drm?.headers,
+            }),
         });
         this.player.one('loadedmetadata', () => {
           console.log('VIDEO_JS: loadedmetadata on setSrc');
@@ -180,6 +136,7 @@ class VideoJsPlayer implements PlayerInterface {
   }
 
   private getKeySystems(drm: Drm): Object {
+    console.log(drm.type);
     if (drm.type === 'widevine') {
       return { 'com.widevine.alpha': drm.data.licenseUrl };
     }
@@ -207,25 +164,33 @@ class VideoJsPlayer implements PlayerInterface {
               spc: b64LicenseRequest,
             };
 
-            const parts = fairPlayDrm.licenseUrl.split('jwt=');
+            const parts = fairPlayDrm.licenseUrl.split('&jwt=');
             if (parts.length !== 2) {
               console.error('missing jwt token in licence');
             }
-            const token = parts[1];
+            const [url, token] = parts;
 
             const headers = {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             };
+
+            console.log(fairPlayDrm.licenseUrl);
+            console.log(payload);
+            console.log(headers);
             videojs.xhr(
               {
-                uri: fairPlayDrm.licenseUrl,
+                uri: url,
                 method: 'POST',
                 responseType: 'json',
                 body: JSON.stringify(payload),
                 headers,
               },
               function (error, resp, body) {
+                console.log('res');
+                console.log(body);
+                console.log(resp);
+                console.log(error);
                 if (error != null) {
                   callback(error);
                 }
@@ -286,6 +251,63 @@ class VideoJsPlayer implements PlayerInterface {
 
   onEvent(listener: PlayerEventCallback): void {
     this.eventCallback = listener;
+
+    this.player.on('ended', () => {
+      this.eventCallback?.({ key: this.playerId, type: 'completed' });
+    });
+
+    this.player.on('play', () => {
+      this.eventCallback?.({ key: this.playerId, type: 'play' });
+    });
+
+    this.player.on('pause', () => {
+      this.eventCallback?.({ key: this.playerId, type: 'pause' });
+    });
+
+    this.player.on('loadstart', () => {
+      this.eventCallback?.({ key: this.playerId, type: 'bufferingStart' });
+    });
+
+    this.player.on('progress', () => {
+      const buffered = this.player.buffered();
+      const duration = this.player.duration();
+      const bufferedRanges = Array(buffered?.length)
+        .fill(0)
+        .map((_, i) => ({
+          start: buffered.start(i),
+          end: buffered.end(i),
+        }));
+      if (bufferedRanges.length > 0) {
+        if (bufferedRanges[buffered.length - 1].end === duration) {
+          this.eventCallback?.({
+            key: this.playerId,
+            type: 'bufferingEnd',
+          });
+        } else {
+          this.eventCallback?.({
+            key: this.playerId,
+            type: 'bufferingUpdate',
+            buffered: bufferedRanges,
+          });
+        }
+      }
+    });
+
+    this.player.on('loadedmetadata', () => {
+      console.log(
+        `VIDEO_JS: loadedmetadata duration: ${this.player.duration()} width: ${this.player.videoWidth()} height:  ${this.player.videoHeight()}`
+      );
+
+      this.eventCallback?.({
+        key: this.playerId,
+        type: 'initialized',
+        duration: this.player.duration(),
+        size: {
+          width: this.player.videoWidth(),
+          height: this.player.videoHeight(),
+        },
+      });
+    });
   }
 }
 

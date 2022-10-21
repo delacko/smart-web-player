@@ -44,6 +44,8 @@ export interface PlayerEvent {
 export type PlayerEventCallback = (event: PlayerEvent) => void;
 
 export interface PlayerInterface {
+  isInitialized: () => boolean;
+
   viewElement: () => HTMLElement;
 
   init: () => Promise<void>;

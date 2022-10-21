@@ -1,8 +1,3 @@
-import { VideoJsPlayer } from './video_js';
+import { VideoJsPlayer } from 'src/video_js';
 
-function getPlayer(): VideoJsPlayer {
-  return new VideoJsPlayer();
-}
-
-export { VideoJsPlayer };
-export default getPlayer;
+export default VideoJsPlayer;
