@@ -1,0 +1,43 @@
+<html>
+    <script type="text/javascript" src="bundle.js"></script>
+    <script>
+        var player = new WebOsPlayer();
+
+        let idx =0 
+        async function playit(){
+
+
+            try {
+
+                console.log("player init")
+                await player.init();
+            }
+            catch(e){
+                console.log("error at init")
+                console.log(e)
+            }
+
+
+            var url;
+            url ="https://devel.uniqcast.com/samples/trailer2.mp4"
+            //       var url = "https://devel.uniqcast.com/samples/bipbop/bipbop_4x3_variant.m3u8"
+            if(idx %2 == 1){
+                url ="https://devel.uniqcast.com/samples/trailer.mp4"
+                //url ="https://devel.uniqcast.com/samples/multi_audio_hls/test1/master.m3u8"
+            }
+            idx++
+            console.log("setting url "+ url)
+            await player.setSrc(url);
+            await player.play()
+        }
+    </script>
+
+    <body>
+        <button type="button" onclick="playit()">Play me</button>
+        <div>
+            <video id="video_js_player"></video>
+        </div>
+
+    </body>
+
+</html>
